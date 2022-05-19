@@ -27,7 +27,7 @@ function verifyJWT(req, res, next){
     if(err){
       return res.status(403).send({message: 'Forbidden Access'});
     }
-    // console.log(decoded) // bar
+    // console.log(decoded) 
     req.decoded = decoded;
     next();
   });
@@ -39,7 +39,20 @@ async function run(){
         const serviceCollection = client.db('doctors_portal').collection('services');
         const bookingCollection = client.db('doctors_portal').collection('bookings');
         const userCollection = client.db('doctors_portal').collection('users');
+        const doctorCollection = client.db('doctors_portal').collection('doctors');
 
+
+        const verifyAdmin = async( req, res, next) => {
+          const requester = req.decoded.email;
+          const requesterAccount = await userCollection.findOne({email: requester});
+          if(requesterAccount.role === 'admin'){
+
+          }
+          else{
+            res.status(403).send({message: 'Forbidden Request'});
+          }
+          next();
+        }
 
         app.get('/user', verifyJWT, async (req, res) => {
           const users = await userCollection.find().toArray();
@@ -56,25 +69,25 @@ async function run(){
 
 
             //  do admin in Dashboard Route (All User) page
-        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+        app.put('/user/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
           const email = req.params.email;
-          const requester = req.decoded.email;
-          const requesterAccount = await userCollection.findOne({email: requester});
-          if(requesterAccount.role === 'admin'){
+          // const requester = req.decoded.email;
+          // const requesterAccount = await userCollection.findOne({email: requester});
+          // if(requesterAccount.role === 'admin'){
             const filter = {email: email};
             const updateDoc = {
               $set: {role: 'admin'},
             };
             const result = await userCollection.updateOne(filter, updateDoc);
             res.send(result);
-          }
-          else{
-            res.status(403).send({message: 'Forbidden Request'});
-          }
+          // }
+          // else{
+          //   res.status(403).send({message: 'Forbidden Request'});
+          // }
         });
 
 
-            // find and update user data in database
+            // find and update user data in database (when user login or Register)
         app.put('/user/:email', async (req, res) => {
           const email = req.params.email;
           const user = req.body;
@@ -84,14 +97,14 @@ async function run(){
             $set: user,
           };
           const result = await userCollection.updateOne(filter, updateDoc, option);
-          const token = jwt.sign({email: email}, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1h'})
+          const token = jwt.sign({email: email}, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '1d'})
           res.send({result, token});
         });
 
 
         app.get('/service', async(req, res)=>{
             const query = {};
-            const cursor = serviceCollection.find(query);
+            const cursor = serviceCollection.find(query).project({name: 1});
             const services = await cursor.toArray();
             res.send(services);
         });
@@ -147,7 +160,7 @@ async function run(){
           }else{
             return res.status(403).send({message: 'Forbidden access'})
           }
-        })
+        });
 
         app.post('/booking', async (req, res) => {
           const booking = req.body;
@@ -158,7 +171,28 @@ async function run(){
           }
           const result = await bookingCollection.insertOne(booking);
           return res.send({success: true, result});
-        })
+        });
+
+
+        app.get('/doctor', verifyJWT, verifyAdmin, async(req, res) => {
+          const doctors = await doctorCollection.find().toArray();
+          res.send(doctors);
+        });
+
+            // Add a Doctor in database
+        app.post('/doctor', verifyJWT, verifyAdmin, async(req, res) => {
+          const doctor = req.body;
+          const result = await doctorCollection.insertOne(doctor);
+          res.send(result);
+        });
+
+        app.delete('/doctor/:email', verifyJWT, verifyAdmin, async(req, res) => {
+          const email = req.params.email;
+          const filter = {email: email};
+          console.log(filter);
+          const result = await doctorCollection.deleteOne(filter);
+          res.send(result);
+        });
 
     }
     finally{
